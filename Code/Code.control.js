@@ -9,10 +9,10 @@
  * How it works
  * ------------
  *
- *  8 first macro on track
- *  ----------------------
+ *  Macro of first device in selected track
+ *  ---------------------------------------
  *
- *  When selecting a track in Bitwig Studio, the first 8 Macro settings are
+ *  When selecting a track in Bitwig Studio, the 8 Macro settings are
  *  mapped to the first 8 encoders on the Code:
  *      +---------------------+
  *      |  O x x x x . . . .  |
@@ -22,15 +22,53 @@
  *      |  O O O O O O O O O  |
  *      +---------------------+
  *  
- * We need to set Livid Code to defaults,
- * enc speed A = 1x
- * enc speed B = 1/4x
- * top left button momentary enc speed
+ *
+ *  Macro of selected device
+ *  ------------------------
+ *
+ *  When selecting a device in Bitwig Studio, the 8 Macro settings are
+ *  mapped to the following 8 encoders on the Code:
+ *      +---------------------+
+ *      |  O . . . . x x x x  |
+ *      |  O . . . . x x x x  |
+ *      |  O . . . . . . . .  |
+ *      |  O . . . . . . . .  |
+ *      |  O O O O O O O O O  |
+ *      +---------------------+
+ *
+ *
+ *  Select track
+ *  ------------
+ *
+ *  You can use the lower row of Code buttons to select track:
+ *      +---------------------+
+ *      |  O . . . . . . . .  |
+ *      |  O . . . . . . . .  |
+ *      |  O . . . . . . . .  |
+ *      |  O . . . . . . . .  |
+ *      |  O x x x x x x x x  | 8 track selection
+ *      +---------------------+
+ *
+ *
+ * Setup
+ * -----
+ *  We need to set Livid Code to defaults and the following opt. changes
+ *    * enc speed A = 1x
+ *    * enc speed B = 1/4x
+ *    * top left button momentary enc speed
  */
 loadAPI (1)
 
 var VERSION = '1.0'
 
+// --------------------------------------------- BASIC SETUP
+// set properties
+host.defineController
+( 'Lucidogen', 'Code', '1.0', '2f722a80-d8cb-11e5-a837-0800200c9a66' )
+
+host.defineMidiPorts ( 1, 1 )
+
+// --------------------------------------------- KNOBS SETUP
 // Number of controls watched on selected track
 var STRACK_CONTROLS_COUNT = 8
 var RESOLUTION = 128
@@ -44,7 +82,7 @@ var BW_MACROS =
 , 13, 14, 15, 16,   29, 30, 31, 32
 ]
 // We use default mapping for simplification
-var LIVID_CODE =
+var CODE_ROTARY =
 [  1,  5,  9, 13,   17, 21, 25, 29
 ,  2,  6, 10, 14,   18, 22, 26, 30
 
@@ -55,18 +93,90 @@ var LIVID_CODE =
 var CTRL_TO_MAC = []
 var MAC_TO_CTRL = []
 for ( var i = 0; i < BW_MACROS.length; ++i )
-{ var ctrl = LIVID_CODE [ i ]
+{ var ctrl = CODE_ROTARY [ i ]
   var mac  = BW_MACROS  [ i ]
   CTRL_TO_MAC [ ctrl ] = mac
   MAC_TO_CTRL [ mac  ] = ctrl
 }
+
+function setupMacros ( strack, sdevice )
+{ 
+  // Devices of selected track
+  var sdevices =
+  strack.createDeviceBank ( STRACK_CONTROLS_COUNT )
+
+  // First device in selected track
+  var firstDevice = sdevices.getDevice ( 0 )
+
+  function setupMacro ( macro, mac )
+  { var ctrl  = MAC_TO_CTRL [ mac ]
+    macro.addValueObserver
+    ( RESOLUTION, function ( value )
+      { // channel 1, cc, value
+        midiOut.sendMidi ( 0xB0, ctrl, value )
+      }
+    )
+    macro.setIndication ( true )
+    MACROS [ mac ] = macro
+  }
+
+  // first device in selected track
+  for ( var i = 1; i <= 8; ++i )
+  { var macro = firstDevice.getMacro ( i - 1 ).getAmount ()
+    setupMacro ( macro, i )
+  }
+  // selected device
+  for ( var i = 17; i <= 24; ++i )
+  { var macro = sdevice.getMacro ( i - 17 ).getAmount ()
+    setupMacro ( macro, i )
+  }
+}
+
+// --------------------------------------------- BUTTONS SETUP
+// TRACKS = [  0,  1, ...,  7 ]
+// NOTES  = [ 38, 39, ..., 45 ]
+var TRACK_BANK_COUNT = 8
+var trackBank
+function trackToNote ( track )
+{ if ( track < 8 )
+  { return track + 38
+  } else
+  { return -1
+  }
+}
+
+function noteToTrack ( note )
+{ if ( note >= 38 && note <= 45 )
+  { return note - 38
+  } else
+  { return -1
+  }
+}
   
+function setupSTrack ( strack )
+{
+  var lnote = -1
+  strack.addPositionObserver
+  ( function ( pos )
+    { println ( 'POSITION: ' + pos )
+      if ( lnote > 0 )
+      { // channel 1 NoteOff, note, velocity
+        midiOut.sendMidi ( 0x80, lnote, 0 )
+      }
 
-// set properties
-host.defineController
-( 'Lucidogen', 'Code', '1.0', '2f722a80-d8cb-11e5-a837-0800200c9a66' )
+      var note = trackToNote ( pos )
+      if ( note > 0 )
+      { // channel 1 NoteOn, note, velocity
+        midiOut.sendMidi ( 0x90, note, 127 )
+        lnote = note
+      }
+    }
+  )
+}
 
-host.defineMidiPorts ( 1, 1 )
+function setupButtons ( strack )
+{ trackBank = host.createMainTrackBank ( TRACK_BANK_COUNT, 0, 0 )
+}
 
 function init ()
 { // Set MIDI callbacks
@@ -80,29 +190,14 @@ function init ()
   var strack =
   host.createArrangerCursorTrack ( 2, 0 )
 
-  // Devices of selected track
-  var sdevices =
-  strack.createDeviceBank ( STRACK_CONTROLS_COUNT )
+  var sdevice =
+  host.createEditorCursorDevice ()
 
-  // First device in selected track
-  var firstDevice = sdevices.getDevice ( 0 )
+  setupSTrack ( strack )
 
-  function setupMacro ( mac )
-  { var macro = firstDevice.getMacro ( mac - 1 ).getAmount ()
-    var ctrl  = MAC_TO_CTRL [ mac ]
-    macro.addValueObserver
-    ( RESOLUTION, function ( value )
-      { // channel 1, cc, value
-        midiOut.sendMidi ( 0xB0, ctrl, value )
-      }
-    )
-    macro.setIndication ( true )
-    MACROS [ mac ] = macro
-  }
+  setupMacros ( strack, sdevice )
 
-  for ( var i = 1; i <= STRACK_CONTROLS_COUNT; ++i )
-  { setupMacro ( i )
-  }
+  setupButtons ( strack )
 
   println ( 'Lucidogen Code v ' + VERSION + ' setup completed.')
 }
@@ -115,6 +210,17 @@ function onMidi ( status, data1, data2 )
     { var m = MACROS [ mac ]
       if ( m )
       { m.set ( data2, RESOLUTION )
+      }
+    }
+  }
+
+  if ( status == 0x90 ) // NoteOn, channel 1
+  { var tid = noteToTrack ( data1 )
+    if ( tid >= 0 )
+    { // select track
+      var track = trackBank.getTrack ( tid )
+      if ( track )
+      { track.select ()
       }
     }
   }
