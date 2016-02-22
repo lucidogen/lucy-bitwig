@@ -9,16 +9,16 @@
  * How it works
  * ------------
  *
- *  Macro of first device in selected track
- *  ---------------------------------------
+ *  Macro of first 3 devices in selected track
+ *  ------------------------------------------
  *
  *  When selecting a track in Bitwig Studio, the 8 Macro settings are
  *  mapped to the first 8 encoders on the Code:
  *      +---------------------+
- *      |  O x x x x . . . .  |
- *      |  O x x x x . . . .  |
- *      |  O . . . . . . . .  |
- *      |  O . . . . . . . .  |
+ *      |  O 1 1 1 1 2 2 2 2  |
+ *      |  O 1 1 1 1 2 2 2 2  |
+ *      |  O 3 3 3 3 . . . .  |
+ *      |  O 3 3 3 3 . . . .  |
  *      |  O O O O O O O O O  |
  *      +---------------------+
  *  
@@ -29,10 +29,10 @@
  *  When selecting a device in Bitwig Studio, the 8 Macro settings are
  *  mapped to the following 8 encoders on the Code:
  *      +---------------------+
- *      |  O . . . . x x x x  |
- *      |  O . . . . x x x x  |
  *      |  O . . . . . . . .  |
  *      |  O . . . . . . . .  |
+ *      |  O . . . . s s s s  |
+ *      |  O . . . . s s s s  |
  *      |  O O O O O O O O O  |
  *      +---------------------+
  *
@@ -51,7 +51,7 @@
  *
  *
  * Setup
- * -----
+ * -----                    
  *  We need to set Livid Code to defaults and the following opt. changes
  *    * enc speed A = 1x
  *    * enc speed B = 1/4x
@@ -75,11 +75,11 @@ var RESOLUTION = 128
 var MACROS   = []
 // Bitwig macro layout
 var BW_MACROS =
-[  1,  2,  3,  4,   17, 18, 19, 20
-,  5,  6,  7,  8,   21, 22, 23, 24
+[  1,  2,  3,  4,    9, 10, 11, 12
+,  5,  6,  7,  8,   13, 14, 15, 16
 
-,  9, 10, 11, 12,   25, 26, 27, 28
-, 13, 14, 15, 16,   29, 30, 31, 32
+, 17, 18, 19, 20,   25, 26, 27, 28
+, 21, 22, 23, 24,   29, 30, 31, 32
 ]
 // We use default mapping for simplification
 var CODE_ROTARY =
@@ -105,9 +105,6 @@ function setupMacros ( strack, sdevice )
   var sdevices =
   strack.createDeviceBank ( STRACK_CONTROLS_COUNT )
 
-  // First device in selected track
-  var firstDevice = sdevices.getDevice ( 0 )
-
   function setupMacro ( macro, mac )
   { var ctrl  = MAC_TO_CTRL [ mac ]
     macro.addValueObserver
@@ -120,15 +117,17 @@ function setupMacros ( strack, sdevice )
     MACROS [ mac ] = macro
   }
 
-  // first device in selected track
-  for ( var i = 1; i <= 8; ++i )
-  { var macro = firstDevice.getMacro ( i - 1 ).getAmount ()
-    setupMacro ( macro, i )
+  // first 3 devices in selected track
+  for ( var i = 0; i < 24; ++i )
+  { var macro = sdevices.getDevice ( Math.floor ( i / 8 ) )
+    .getMacro ( i % 8 ).getAmount ()
+    setupMacro ( macro, i + 1 )
   }
+
   // selected device
-  for ( var i = 17; i <= 24; ++i )
-  { var macro = sdevice.getMacro ( i - 17 ).getAmount ()
-    setupMacro ( macro, i )
+  for ( var i = 24; i < 32; ++i )
+  { var macro = sdevice.getMacro ( i ).getAmount ()
+    setupMacro ( macro, i + 1 )
   }
 }
 
